@@ -17,7 +17,7 @@ class User(base):
     show_teacher_fullname = Column("show_teacher_fullname", Boolean, default=True, quote=False)
     default_group = Column("default_group", String(12), quote=False)
     show_room_info = Column("show_room_info", Boolean, default=False, quote=False)
-    role_id = Column(Integer, ForeignKey('roles.id'), nullable=False, quote=False)
+    role_id = Column(Integer, ForeignKey('role.id'), nullable=False)
     show_group_info = Column("show_group_info", Boolean, default=False, quote=False)
     role = relationship("Role")
 

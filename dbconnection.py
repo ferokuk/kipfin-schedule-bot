@@ -1,7 +1,3 @@
-import os
-import brom
-from sqlalchemy import select
-from models import *
 from brom import *
 from dotenv import load_dotenv
 load_dotenv()
