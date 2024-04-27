@@ -1,5 +1,3 @@
-from enum import Enum
-
 from aiogram.fsm.state import StatesGroup, State
 
 
@@ -10,4 +8,4 @@ class UserState(StatesGroup):
     schedule_type = State()
     all_groups = State()
     all_teachers = State()
-
+    end = State()

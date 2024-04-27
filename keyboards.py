@@ -5,12 +5,12 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import ru_weekdays, ITEMS_PER_PAGE
 
 
-def create_inline_group_keyboard(current_page: int, all_groups: list[str]) -> InlineKeyboardMarkup:
+def create_inline_group_keyboard(current_page: int, all_groups: list[dict]) -> InlineKeyboardMarkup:
     # all_groups = get_all_groups()
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[get_start_button()], [get_schedule_type_button()]])
     groups_chunks = [all_groups[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_groups), ITEMS_PER_PAGE)]
     for group in groups_chunks[current_page]:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=group, callback_data=group)])
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=group["name"], callback_data=group["id"])])
     # Добавляем кнопки навигации
     if current_page > 0:
         keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="prev_page_groups")])
@@ -81,10 +81,15 @@ def get_schedule_type_button():
     return InlineKeyboardButton(text="Вернуться к выбору вида расписания", callback_data="schedule_type")
 
 
-def get_nav_keyboard(schedule_type: str):
-    text = "Вернутся к выбору преподавателя" if schedule_type == "teacher" else "Вернуться к выбору группы"
-    callback = schedule_type
+def subscribe_to_schedule(entity: str):
+    return InlineKeyboardButton(text="Подписаться на расписание", callback_data=f"sub_{entity}")
+
+
+
+def get_nav_keyboard(entity: str):
     return InlineKeyboardMarkup(inline_keyboard=[
         [get_start_button()],
         [get_schedule_type_button()],
+        [subscribe_to_schedule(entity)]
+        # [InlineKeyboardButton(text=text, callback_data=callback)] не работает
     ])

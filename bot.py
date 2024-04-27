@@ -12,8 +12,10 @@ from config import ITEMS_PER_PAGE
 import psycopg2 as pg
 from keyboards import create_inline_group_keyboard, create_inline_date_keyboard, create_inline_schedule_type_keyboard, \
     create_inline_teacher_keyboard, get_nav_keyboard
+from models import Base, engine, session, User, TeacherSubscription, GroupSubscription
 from states import UserState
-from utils import get_schedule, get_all_groups, check_schedule_by_date, get_all_teachers, get_teacher_schedule
+from utils import get_schedule, get_all_groups, check_schedule_by_date, get_all_teachers, get_teacher_schedule, \
+    get_group_by_id, get_teacher_by_id, get_teacher_id_by_name
 
 load_dotenv()
 bot = Bot(os.getenv("BOT_TOKEN"))
@@ -21,14 +23,6 @@ dp = Dispatcher()
 current_page_dict = dict()
 
 
-# Функция для создания клавиатуры с учетом текущей страницы
-
-
-def on_startup():
-    conn = pg.connect()
-
-
-# Обработчик нажатий на кнопки клавиатуры
 @dp.callback_query(lambda query: query.data in ["prev_page_groups", "next_page_groups"])
 async def navigation_groups(query: types.CallbackQuery, state: FSMContext):
     current_page = current_page_dict.get(query.message.chat.id, 0)
@@ -83,6 +77,10 @@ async def start_handler(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(UserState.date)
     current_page_dict[message.chat.id] = 0
+    if session.query(User).filter_by(id=message.from_user.id).first() is None:
+        new_user = User(id=message.from_user.id, username=message.from_user.username)
+        session.add(new_user)
+        session.commit()
     await state.update_data(all_groups=get_all_groups())
     await message.answer("Выберите дату или напишите её в формате дд.мм.гггг: ",
                          reply_markup=create_inline_date_keyboard(datetime.now()))
@@ -91,6 +89,36 @@ async def start_handler(message: Message, state: FSMContext):
 @dp.callback_query(lambda query: query.data == "start")
 async def back_to_start(query: types.CallbackQuery, state: FSMContext):
     await start_handler(query.message, state)
+
+
+@dp.callback_query(UserState.schedule_type)
+async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
+    schedule_type = query.data
+    if schedule_type == "teacher":
+        await state.set_state(UserState.teacher)
+        teachers = get_all_teachers()
+        data = await state.update_data(all_teachers=teachers, schedule_type=schedule_type, teacher=schedule_type)
+        total_pages = len(teachers) // ITEMS_PER_PAGE + 1
+        keyboard = create_inline_teacher_keyboard(0, teachers)
+        chosen_date = data.get("date")
+        await query.message.answer(f"Вы указали дату {chosen_date}. \n"
+                                   f"Теперь выберите преподавателя или введите его ФИО. \n"
+                                   f"Текущая страница: <b>1 из {total_pages}</b>",
+                                   reply_markup=keyboard,
+                                   parse_mode=ParseMode.HTML)
+
+    if schedule_type == "group":
+        await state.set_state(UserState.group)
+        groups = get_all_groups()
+        data = await state.update_data(all_groups=groups, schedule_type=schedule_type, group=schedule_type)
+        chosen_date = data.get("date")
+        total_pages = len(groups) // ITEMS_PER_PAGE + 1
+        keyboard = create_inline_group_keyboard(0, groups)
+        await query.message.answer(f"Вы указали дату {chosen_date}. \n"
+                                   f"Теперь выберите группу или введите её название в соответствии с названием в ЭлЖур. \n"
+                                   f"Текущая страница: <b>1 из {total_pages}</b>",
+                                   reply_markup=keyboard,
+                                   parse_mode=ParseMode.HTML)
 
 
 @dp.callback_query(lambda query: query.data == "schedule_type")
@@ -142,7 +170,7 @@ async def process_group_input(group_input: str, state: FSMContext, message_or_qu
         group = group_input.strip().upper()
         data = await state.get_data()
         groups = data.get("all_groups", [])
-        if group not in groups:
+        if not any([group in {d.get("name"), d.get("id")} for d in groups]):
             await message_or_query.answer(f"Группы {group} не существует. \n"
                                           f"Возможно вы забыли дефис между направлением и номером? \n"
                                           f"Правильный формат: 1ОИБАС-1222, 3ИСИП-620",
@@ -150,9 +178,11 @@ async def process_group_input(group_input: str, state: FSMContext, message_or_qu
             return
         data = await state.update_data(group=group)
         date = datetime.strptime(data["date"], "%d.%m.%Y")
-        schedule_type = data.get("teacher") or data.get("group")
-        await message_or_query.answer(get_schedule(group=data["group"], date=date), parse_mode=ParseMode.HTML,
-                                      reply_markup=get_nav_keyboard(schedule_type))
+        group = get_group_by_id(int(data["group"])) if data["group"].isnumeric() else data["group"]
+        await message_or_query.answer(get_schedule(group=group, date=date),
+                                      parse_mode=ParseMode.HTML,
+                                      reply_markup=get_nav_keyboard(group))
+        await state.set_state(UserState.end)
     except Exception as e:
         print(f"ОШИБКА ПРИ ПОЛУЧЕНИИ РАСПИСАНИЯ: {e}")
         await message_or_query.answer("Произошла ошибка\nПовторите попытку позже")
@@ -164,15 +194,18 @@ async def process_teacher_input(teacher_input: str, state: FSMContext, message_o
         teacher = teacher_input.strip()
         data = await state.get_data()
         teachers = data.get("all_teachers", [])
-        if not any(d.get("id") == teacher for d in teachers):
+        if not any(teacher in {d.get("id"), d.get("name")} for d in teachers):
             await message_or_query.answer(f"Преподавателя {teacher} не существует. \n",
                                           reply_markup=create_inline_teacher_keyboard(current_page, teachers))
             return
         data = await state.update_data(teacher=teacher)
         date = datetime.strptime(data["date"], "%d.%m.%Y")
-        schedule_type = data.get("teacher") or data.get("group")
-        await message_or_query.answer(get_teacher_schedule(teacher_id=data["teacher"], date=date),
-                                      parse_mode=ParseMode.HTML, reply_markup=get_nav_keyboard(schedule_type))
+        teacher = get_teacher_by_id(int(data["teacher"])) if data["teacher"].isnumeric() else data["teacher"]
+        teacher_id = data["teacher"] if data["teacher"].isnumeric() else get_teacher_id_by_name(data["teacher"])
+        await message_or_query.answer(
+            get_teacher_schedule(teacher_full_name=teacher, date=date),
+            parse_mode=ParseMode.HTML, reply_markup=get_nav_keyboard(teacher_id))
+        await state.set_state(UserState.end)
     except Exception as e:
         print(f"ОШИБКА ПРИ ПОЛУЧЕНИИ РАСПИСАНИЯ: {e}")
         await message_or_query.answer("Произошла ошибка\nПовторите попытку позже")
@@ -208,36 +241,17 @@ async def process_teacher_text(message: Message, state: FSMContext):
     await process_teacher_input(message.text, state, message)
 
 
-@dp.callback_query(UserState.schedule_type)
-async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
-    schedule_type = query.data
-    if schedule_type == "teacher":
-        await state.set_state(UserState.teacher)
-        teachers = get_all_teachers()
-        await state.update_data(all_teachers=teachers)
-        data = await state.update_data(teachers=schedule_type)
-        total_pages = len(teachers) // ITEMS_PER_PAGE + 1
-        keyboard = create_inline_teacher_keyboard(0, teachers)
-        chosen_date = data.get("date")
-        await query.message.answer(f"Вы указали дату {chosen_date}. \n"
-                                   f"Теперь выберите преподавателя или введите его ФИО. \n"
-                                   f"Текущая страница: <b>1 из {total_pages}</b>",
-                                   reply_markup=keyboard,
-                                   parse_mode=ParseMode.HTML)
-
-    if schedule_type == "group":
-        await state.set_state(UserState.group)
-        groups = get_all_groups()
-        await state.update_data(all_groups=groups)
-        data = await state.update_data(group=schedule_type)
-        chosen_date = data.get("date")
-        total_pages = len(groups) // ITEMS_PER_PAGE + 1
-        keyboard = create_inline_group_keyboard(0, groups)
-        await query.message.answer(f"Вы указали дату {chosen_date}. \n"
-                                   f"Теперь выберите группу или введите её название в соответствии с названием в ЭлЖур. \n"
-                                   f"Текущая страница: <b>1 из {total_pages}</b>",
-                                   reply_markup=keyboard,
-                                   parse_mode=ParseMode.HTML)
+@dp.callback_query(UserState.end, F.data.startswith("sub_"))
+async def subscribe_callback_handler(query: types.CallbackQuery):
+    entity = query.data.split("_")[1]
+    if entity.isnumeric():
+        data = get_teacher_by_id(int(entity))
+        new_sub = TeacherSubscription(user_id=query.message.chat.id, teacher=data)
+    else:
+        data = entity
+        new_sub = GroupSubscription(user_id=query.message.chat.id, group=data)
+    session.add(new_sub)
+    session.commit()
 
 
 async def main() -> None:
@@ -245,5 +259,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    Base.metadata.create_all(engine)
     print("Bot started")
     asyncio.run(main())

@@ -6,12 +6,12 @@ import brom
 from dbconnection import DBConnection
 
 
-def get_all_groups() -> list[str]:
+def get_all_groups() -> list[dict]:
     con = DBConnection().client
     selector: brom.Селектор = con.Справочники.Группы.СоздатьСелектор()
     selector.ДобавитьОтбор("Совмещение", False)
     selector.ДобавитьОтбор("ПометкаУдаления", False)
-    return [g.Наименование for g in selector.Выбрать().ВыгрузитьРезультат()]
+    return [{"name": g.Наименование, "id": str(int(g.Код))} for g in selector.Выбрать().ВыгрузитьРезультат()]
 
 
 def get_all_teachers() -> list[dict]:
@@ -29,15 +29,18 @@ def get_schedule(group: str, date: datetime = None) -> str:
                  date.year == s.Дата.year
                  ]
     if not schedules:
-        return f"Расписания для <b>{group}</b> на {date.strftime('%d.%m.%Y')} нет."
+        return f"Расписания на {date.strftime('%d.%m.%Y')} нет."
     schedule = schedules[-1]
     res = f"""Расписание для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')}"""
     for class_number in range(1, int(os.getenv("MAX_LESSONS")) + 1):
+        current_class_schedule = ""
         for row in getattr(schedule, f"Пара{class_number}"):
             if group in str(row.Группа.Наименование):
                 teacher = str(row.Преподаватель or "Нет").strip()
                 classroom = str(row.Аудитория.Наименование or "Нет").strip()
-                res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> <i>{teacher}</i> - {classroom}"
+                current_class_schedule += f"\n<i>{teacher}</i> - {classroom}"
+        if current_class_schedule:
+            res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
     if res == f"""Расписание для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')}""":
         return f"Пар для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет"
     return res
@@ -52,26 +55,26 @@ def check_schedule_by_date(date: datetime) -> bool:
                 for d in selector.Выполнить().ВыгрузитьРезультат()])
 
 
-def get_teacher_schedule(teacher_id: str, date: datetime = None) -> str:
+def get_teacher_schedule(teacher_full_name: str, date: datetime = None) -> str:
     con = DBConnection()
     selector: brom.Селектор = con.client.Документы.СоставлениеРасписания.СоздатьСелектор()
     schedules = [s for s in selector.Выполнить().ВыгрузитьРезультат() if date.day == s.Дата.day and
                  date.month == s.Дата.month and
                  date.year == s.Дата.year
                  ]
-    teacher_selector: brom.Селектор = con.client.Справочники.Преподаватели.СоздатьСелектор()
-    teacher_selector.ДобавитьОтбор("Код", int(teacher_id))
-    teacher_full_name = teacher_selector.ВыгрузитьРезультат()[-1].Наименование
     if not schedules:
-        return f"Расписания для преподавателя <b>{teacher_full_name}</b> на {date.strftime('%d.%m.%Y')} нет."
+        return f"Расписания на {date.strftime('%d.%m.%Y')} нет."
     schedule = schedules[-1]
     res = f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для преподавателя <b>{teacher_full_name}</b>"""
     for class_number in range(1, int(os.getenv("MAX_LESSONS")) + 1):
+        current_class_schedule = ""
         for row in getattr(schedule, f"Пара{class_number}"):
             if teacher_full_name == row.Преподаватель.Наименование:
                 group = str(row.Группа.Наименование).strip()
                 classroom = str(row.Аудитория.Наименование).strip()
-                res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> <i>{group}</i> - {classroom}"
+                current_class_schedule += f"\n<i>{group}</i> - {classroom}"
+        if current_class_schedule:
+            res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
     if res == f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для преподавателя <b>{teacher_full_name}</b>""":
         return f"Пар для <b>{teacher_full_name}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет"
     return res
@@ -88,3 +91,23 @@ def get_class_time(class_number: int, date: datetime) -> str:
         7: "19:10-20:40" if date.weekday() != 5 else "18:40-20:10"
     }
     return schedule.get(class_number)
+
+
+def get_group_by_id(group_id: int) -> str:
+    con = DBConnection()
+    group_selector: brom.Селектор = con.client.Справочники.Группы.СоздатьСелектор()
+    group_selector.ДобавитьОтбор("Код", group_id)
+    return group_selector.ВыгрузитьРезультат()[-1].Наименование
+
+
+def get_teacher_by_id(teacher_id: int) -> str:
+    con = DBConnection()
+    group_selector: brom.Селектор = con.client.Справочники.Преподаватели.СоздатьСелектор()
+    group_selector.ДобавитьОтбор("Код", teacher_id)
+    return group_selector.ВыгрузитьРезультат()[-1].Наименование
+
+def get_teacher_id_by_name(teacher_name: int) -> int:
+    con = DBConnection()
+    group_selector: brom.Селектор = con.client.Справочники.Преподаватели.СоздатьСелектор()
+    group_selector.ДобавитьОтбор("Наименование", teacher_name)
+    return group_selector.ВыгрузитьРезультат()[-1].Код
