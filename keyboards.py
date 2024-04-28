@@ -9,13 +9,26 @@ def create_inline_group_keyboard(current_page: int, all_groups: list[dict]) -> I
     # all_groups = get_all_groups()
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[get_start_button()], [get_schedule_type_button()]])
     groups_chunks = [all_groups[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_groups), ITEMS_PER_PAGE)]
+    row = []
     for group in groups_chunks[current_page]:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=group["name"], callback_data=group["id"])])
+        row.append(InlineKeyboardButton(text=group["name"], callback_data=group["id"]))
+        if len(row) == 2:
+            keyboard.inline_keyboard.append(row)
+            row = []
+    if row:
+        keyboard.inline_keyboard.append(row)
+    prev_btn = InlineKeyboardButton(text="⬅️Назад", callback_data="prev_page_groups")
+    next_btn = InlineKeyboardButton(text="Вперёд➡️", callback_data="next_page_groups")
     # Добавляем кнопки навигации
-    if current_page > 0:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="prev_page_groups")])
-    if current_page < len(groups_chunks) - 1:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="Вперёд", callback_data="next_page_groups")])
+    if 0 < current_page < len(groups_chunks) - 1:
+        keyboard.inline_keyboard.append(
+            [prev_btn, next_btn]
+        )
+    else:
+        if current_page > 0:
+            keyboard.inline_keyboard.append([prev_btn])
+        if current_page < len(groups_chunks) - 1:
+            keyboard.inline_keyboard.append([next_btn])
 
     return keyboard
 
@@ -25,18 +38,25 @@ def create_inline_teacher_keyboard(current_page: int, all_teachers: list[dict]) 
     groups_chunks = [all_teachers[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_teachers), ITEMS_PER_PAGE)]
     for teacher in groups_chunks[current_page]:
         keyboard.inline_keyboard.append([InlineKeyboardButton(text=teacher["name"], callback_data=teacher["id"])])
-    # Добавляем кнопки навигации
-    if current_page > 0:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="prev_page_teachers")])
-    if current_page < len(groups_chunks) - 1:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="Вперёд", callback_data="next_page_teachers")])
+    prev_btn = InlineKeyboardButton(text="⬅️Назад", callback_data="prev_page_teachers")
+    next_btn = InlineKeyboardButton(text="Вперёд➡️", callback_data="next_page_teachers")
+    if 0 < current_page < len(groups_chunks) - 1:
+        keyboard.inline_keyboard.append(
+            [prev_btn, next_btn]
+        )
+    else:
+        # Добавляем кнопки навигации
+        if current_page > 0:
+            keyboard.inline_keyboard.append([prev_btn])
+        if current_page < len(groups_chunks) - 1:
+            keyboard.inline_keyboard.append([next_btn])
 
     return keyboard
 
 
-def create_inline_date_keyboard(date: datetime):
+def create_inline_date_keyboard(date: datetime) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(resize_keyboard=True, inline_keyboard=[])
-    for i in range(4, -1, -1):  # Итерируемся сегодня от сегодня до сегодня - 4 дня
+    for i in range(3, -1, -1):  # Итерируемся сегодня от сегодня до сегодня - 4 дня
         current_date = date - timedelta(days=i)
         # Если день недели не воскресенье, добавляем кнопку
         if current_date.weekday() != 6:
@@ -49,16 +69,16 @@ def create_inline_date_keyboard(date: datetime):
                 button_text = f"{date_text} ({day_of_week})"
             keyboard.inline_keyboard.append([InlineKeyboardButton(text=button_text, callback_data=date_text)])
         # Добавляем кнопку для завтрашнего дня, если завтра не воскресенье
-    tomorrow = date + timedelta(days=1)
-    if tomorrow.weekday() != 6:
-        tomorrow_text = tomorrow.strftime('%d.%m.%Y')
-        tomorrow_day_of_week = ru_weekdays[tomorrow.weekday()]
-        keyboard.inline_keyboard.append(
-            [InlineKeyboardButton(text=f"{tomorrow_text} ({tomorrow_day_of_week})", callback_data=tomorrow_text)])
+    tomorrow_delta = 1 if (date + timedelta(days=1)).weekday() != 6 else 2
+    current_date = date + timedelta(days=tomorrow_delta)
+    date_text = current_date.strftime('%d.%m.%Y')
+    day_of_week = ru_weekdays[current_date.weekday()]
+    button_text = f"{date_text} ({day_of_week})"
+    keyboard.inline_keyboard.append([InlineKeyboardButton(text=button_text, callback_data=date_text)])
     return keyboard
 
 
-def create_inline_schedule_type_keyboard():
+def create_inline_schedule_type_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -73,23 +93,41 @@ def create_inline_schedule_type_keyboard():
         ])
 
 
-def get_start_button():
+def get_start_button() -> InlineKeyboardButton:
     return InlineKeyboardButton(text="Вернуться к выбору даты", callback_data="start")
 
 
-def get_schedule_type_button():
+def get_schedule_type_button() -> InlineKeyboardButton:
     return InlineKeyboardButton(text="Вернуться к выбору вида расписания", callback_data="schedule_type")
 
 
-def subscribe_to_schedule(entity: str):
+def subscribe_to_schedule(entity: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text="Подписаться на расписание", callback_data=f"sub_{entity}")
 
 
+def unsubscribe_to_schedule(entity: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text="Отписаться от расписания", callback_data=f"unsub_{entity}")
 
-def get_nav_keyboard(entity: str):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [get_start_button()],
-        [get_schedule_type_button()],
-        [subscribe_to_schedule(entity)]
-        # [InlineKeyboardButton(text=text, callback_data=callback)] не работает
-    ])
+
+def create_nav_keyboard(entity: str, schedule_type: str, is_subscribe: bool) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                get_start_button()
+            ],
+            [
+                get_schedule_type_button()
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"Вернуться к выбору {'группы' if schedule_type == 'group' else 'преподавателя'}",
+                    callback_data="open_teachers_nav" if schedule_type == 'teacher' else "open_groups_nav")
+            ],
+            [
+                subscribe_to_schedule(entity)
+            ]
+            if is_subscribe else
+            [
+                unsubscribe_to_schedule(entity)
+            ]
+        ])

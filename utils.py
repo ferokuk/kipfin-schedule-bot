@@ -31,7 +31,8 @@ def get_schedule(group: str, date: datetime = None) -> str:
     if not schedules:
         return f"Расписания на {date.strftime('%d.%m.%Y')} нет."
     schedule = schedules[-1]
-    res = f"""Расписание для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')}"""
+    header = f"Расписание для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')}"
+    res = f""""""
     for class_number in range(1, int(os.getenv("MAX_LESSONS")) + 1):
         current_class_schedule = ""
         for row in getattr(schedule, f"Пара{class_number}"):
@@ -41,9 +42,9 @@ def get_schedule(group: str, date: datetime = None) -> str:
                 current_class_schedule += f"\n<i>{teacher}</i> - {classroom}"
         if current_class_schedule:
             res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
-    if res == f"""Расписание для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')}""":
+    if not res:
         return f"Пар для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет"
-    return res
+    return header + res
 
 
 def check_schedule_by_date(date: datetime) -> bool:
@@ -65,7 +66,9 @@ def get_teacher_schedule(teacher_full_name: str, date: datetime = None) -> str:
     if not schedules:
         return f"Расписания на {date.strftime('%d.%m.%Y')} нет."
     schedule = schedules[-1]
-    res = f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для преподавателя <b>{teacher_full_name}</b>"""
+    teacher_full_name = teacher_full_name.strip()
+    header = f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для преподавателя <b>{teacher_full_name}</b>"""
+    res = ""
     for class_number in range(1, int(os.getenv("MAX_LESSONS")) + 1):
         current_class_schedule = ""
         for row in getattr(schedule, f"Пара{class_number}"):
@@ -75,9 +78,9 @@ def get_teacher_schedule(teacher_full_name: str, date: datetime = None) -> str:
                 current_class_schedule += f"\n<i>{group}</i> - {classroom}"
         if current_class_schedule:
             res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
-    if res == f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для преподавателя <b>{teacher_full_name}</b>""":
+    if not res:
         return f"Пар для <b>{teacher_full_name}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет"
-    return res
+    return header + res
 
 
 def get_class_time(class_number: int, date: datetime) -> str:
@@ -111,3 +114,7 @@ def get_teacher_id_by_name(teacher_name: int) -> int:
     group_selector: brom.Селектор = con.client.Справочники.Преподаватели.СоздатьСелектор()
     group_selector.ДобавитьОтбор("Наименование", teacher_name)
     return group_selector.ВыгрузитьРезультат()[-1].Код
+
+
+def create_schedule_with_subscriptions(teachers: list[str], groups: list[str]) -> str:
+    pass
