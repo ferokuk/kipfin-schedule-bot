@@ -1,5 +1,6 @@
 from brom import *
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -20,12 +21,9 @@ class DBConnection:
             print(f"EXCEPTION WHILE CONNECTING:\n{e}")
 
     def execute_query(self, query) -> list[dict]:
-        # if self.client is None:
-        #     raise ConnectionError("NOT CONNECTED")
         try:
             res = [dict(list(row)) for row in self.client.СоздатьЗапрос(query).Выполнить()]
             return res
         except Exception as e:
             print(f"EXCEPTION WITH QUERY:\n{e}")
             return []
-
