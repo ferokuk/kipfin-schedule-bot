@@ -38,7 +38,7 @@ async def scheduled_send():
     while True:
         now = datetime.now()
         tomorrow = now + timedelta(days=1)
-        if now.hour == 22 and tomorrow.weekday() != 6:
+        if now.hour == 22 and now.minute == 0 and tomorrow.weekday() != 6:
             print("send_schedule_to_subscribers STARTED")
             await send_schedule_to_subscribers()
 
