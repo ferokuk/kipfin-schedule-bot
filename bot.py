@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiogram.filters
 from aiogram import Bot, Dispatcher, types, F
@@ -8,16 +8,16 @@ from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from aiogram.utils.formatting import as_section, as_list, as_marked_list
 from dotenv import load_dotenv
 
 from config import ITEMS_PER_PAGE, HELP_TEXT
 from keyboards import create_inline_group_keyboard, create_inline_date_keyboard, create_inline_schedule_type_keyboard, \
-    create_inline_teacher_keyboard, create_nav_keyboard
+    create_inline_teacher_keyboard, create_nav_keyboard, create_subscriptions_keyboard
 from models import Base, engine, session, User, TeacherSubscription, GroupSubscription
+from schedule_sender import scheduled_send
 from states import UserState
 from utils import get_schedule, get_all_groups, check_schedule_by_date, get_all_teachers, get_teacher_schedule, \
-    get_group_by_id, get_teacher_by_id, get_teacher_id_by_name
+    get_group_by_id, get_teacher_by_id, get_schedule_from_subscriptions
 
 load_dotenv()
 bot = Bot(os.getenv("BOT_TOKEN"))
@@ -65,17 +65,19 @@ async def navigation_groups(query: types.CallbackQuery, state: FSMContext):
     current_page = current_page_dict.get(query.message.chat.id, 0)
     data = await state.get_data()
     chosen_date = data.get("date")
-    groups = data.get("all_groups")
+    groups = data.get("all_groups", [])
+    if not groups:
+        return
     total_pages = len(groups) // ITEMS_PER_PAGE + 1
-    if query.data == "prev_page":
+    if query.data == "prev_page_groups":
         current_page = max(current_page - 1, 0)
-    elif query.data == "next_page":
+    elif query.data == "next_page_groups":
         current_page = min(current_page + 1, total_pages - 1)
     current_page_dict[query.message.chat.id] = current_page
     # Обновляем клавиатуру с помощью новой страницы
 
     await bot.edit_message_text(f"Вы указали дату {chosen_date}. \n"
-                                f"Теперь выберите группу. \n"
+                                f"Теперь выберите группу \n"
                                 f"Текущая страница: <b>{current_page + 1} из {total_pages}</b>",
                                 parse_mode=ParseMode.HTML,
                                 chat_id=query.message.chat.id,
@@ -90,7 +92,9 @@ async def navigation_teachers(query: types.CallbackQuery, state: FSMContext):
     current_page = current_page_dict.get(query.message.chat.id, 0)
     data = await state.get_data()
     chosen_date = data.get("date")
-    teachers = data.get("all_teachers")
+    teachers = data.get("all_teachers", [])
+    if not teachers:
+        return
     total_pages = len(teachers) // ITEMS_PER_PAGE + 1
     if query.data == "prev_page_teachers":
         current_page = max(current_page - 1, 0)
@@ -99,7 +103,7 @@ async def navigation_teachers(query: types.CallbackQuery, state: FSMContext):
     current_page_dict[query.message.chat.id] = current_page
     # Обновляем клавиатуру с помощью новой страницы
     await bot.edit_message_text(f"Вы указали дату {chosen_date}. \n"
-                                f"Теперь выберите преподавателя. \n"
+                                f"Теперь выберите преподавателя \n"
                                 f"Текущая страница: <b>{current_page + 1} из {total_pages}</b>",
                                 parse_mode=ParseMode.HTML,
                                 chat_id=query.message.chat.id,
@@ -136,9 +140,60 @@ async def help_handler(message: Message):
 async def subscriptions_handler(message: Message):
     teachers_subs = session.query(TeacherSubscription).filter_by(user_id=message.chat.id).all()
     groups_subs = session.query(GroupSubscription).filter_by(user_id=message.chat.id).all()
-    res = f"<b>{message.from_user.username}</b>, Ваши подписки:\n"
+    tomorrow_delta = 1 if (datetime.now() + timedelta(days=1)).weekday() != 6 else 2
+    today_date = datetime.now()
+    tomorrow_date = datetime.now() + timedelta(days=tomorrow_delta)
 
-    await message.answer(res, parse_mode=ParseMode.HTML)
+    # если сегодня воскресенье
+    if today_date.weekday() == 6:
+        res = get_schedule_from_subscriptions(
+            message.from_user.username,
+            teachers_subs,
+            groups_subs,
+            tomorrow_date,
+        )
+        # без клавиатуры, тк есть расписание только на завтра
+        await message.answer(res,
+                             parse_mode=ParseMode.HTML,
+                             )
+        return
+
+    res = get_schedule_from_subscriptions(
+        message.from_user.username,
+        teachers_subs,
+        groups_subs,
+        tomorrow_date,
+    )
+    await message.answer(res,
+                         parse_mode=ParseMode.HTML,
+                         reply_markup=create_subscriptions_keyboard(today_date, tomorrow_date)
+                         )
+
+
+@dp.callback_query(F.data.in_(["show_tomorrow_subs", "show_today_subs"]))
+async def keyboard_subscriptions_handler(query: types.CallbackQuery):
+    teachers_subs = session.query(TeacherSubscription).filter_by(user_id=query.message.chat.id).all()
+    groups_subs = session.query(GroupSubscription).filter_by(user_id=query.message.chat.id).all()
+    tomorrow_delta = 1 if (datetime.now() + timedelta(days=1)).weekday() != 6 else 2
+    tomorrow_date = datetime.now() + timedelta(days=tomorrow_delta)
+    today_date = datetime.now()
+    if query.data == "show_tomorrow_subs":
+        date = tomorrow_date
+    else:
+        date = today_date
+    res = get_schedule_from_subscriptions(
+        query.message.chat.username,
+        teachers_subs,
+        groups_subs,
+        date,
+    )
+    await bot.edit_message_text(res,
+                                chat_id=query.message.chat.id,
+                                message_id=query.message.message_id,
+                                parse_mode=ParseMode.HTML)
+    await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
+                                        message_id=query.message.message_id,
+                                        reply_markup=create_subscriptions_keyboard(today_date, tomorrow_date))
 
 
 @dp.callback_query(lambda query: query.data == "start")
@@ -165,7 +220,7 @@ async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
         keyboard = create_inline_teacher_keyboard(current_page_dict.get(query.message.chat.id, 0), teachers)
         chosen_date = data.get("date")
         await bot.edit_message_text(f"Вы указали дату {chosen_date}. \n"
-                                    f"Теперь выберите преподавателя. \n"
+                                    f"Теперь выберите преподавателя \n"
                                     f"Текущая страница: <b>1 из {total_pages}</b>",
                                     parse_mode=ParseMode.HTML,
                                     chat_id=query.message.chat.id,
@@ -173,11 +228,6 @@ async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
         await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                             message_id=query.message.message_id,
                                             reply_markup=keyboard, )
-        # await query.message.answer(f"Вы указали дату {chosen_date}. \n"
-        #                            f"Теперь выберите преподавателя или введите его ФИО. \n"
-        #                            f"Текущая страница: <b>1 из {total_pages}</b>",
-        #                            reply_markup=keyboard,
-        #                            parse_mode=ParseMode.HTML)
 
     if schedule_type == "group":
         await state.set_state(UserState.group)
@@ -195,11 +245,6 @@ async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
         await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                             message_id=query.message.message_id,
                                             reply_markup=keyboard, )
-        # await query.message.answer(f"Вы указали дату {chosen_date}. \n"
-        #                            f"Теперь выберите группу или введите её название в соответствии с названием в ЭлЖур. \n"
-        #                            f"Текущая страница: <b>1 из {total_pages}</b>",
-        #                            reply_markup=keyboard,
-        #                            parse_mode=ParseMode.HTML)
 
 
 @dp.callback_query(lambda query: query.data == "schedule_type")
@@ -215,10 +260,6 @@ async def back_to_schedule_type(query: types.CallbackQuery, state: FSMContext):
     await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                         message_id=query.message.message_id,
                                         reply_markup=create_inline_schedule_type_keyboard())
-    # await query.message.answer(f"Вы указали дату {chosen_date}. \n"
-    #                            f"Выберите вид расписания: \n",
-    #                            reply_markup=create_inline_schedule_type_keyboard()
-    #                            )
 
 
 @dp.callback_query(UserState.date)
@@ -226,9 +267,10 @@ async def process_date(query: types.CallbackQuery, state: FSMContext):
     chosen_date = query.data
     if not check_schedule_by_date(datetime.strptime(chosen_date, "%d.%m.%Y")):
         await bot.edit_message_text(
-            f"Расписания на выбранную дату нет.\nВыберите дату: ",
+            f"<b>Расписания на выбранную дату нет.</b>\nВыберите дату: ",
             chat_id=query.message.chat.id,
-            message_id=query.message.message_id)
+            message_id=query.message.message_id,
+            parse_mode=ParseMode.HTML)
         await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                             message_id=query.message.message_id,
                                             reply_markup=create_inline_date_keyboard(datetime.now()))
@@ -274,7 +316,6 @@ async def process_group(query: types.CallbackQuery, state: FSMContext):
         await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                             message_id=query.message.message_id,
                                             reply_markup=create_nav_keyboard(group, "group", is_subscribe), )
-        # await state.set_state(UserState.end)
     except Exception as e:
         print(f"ОШИБКА ПРИ ПОЛУЧЕНИИ РАСПИСАНИЯ: {e}")
         await query.message.answer("Произошла ошибка\nПовторите попытку позже")
@@ -306,13 +347,16 @@ async def process_teacher(query: types.CallbackQuery, state: FSMContext):
                                             message_id=query.message.message_id,
                                             reply_markup=create_nav_keyboard(teacher_id, "teacher", is_subscribe), )
 
-        # await state.set_state(UserState.end)
     except Exception as e:
         print(f"ОШИБКА ПРИ ПОЛУЧЕНИИ РАСПИСАНИЯ: {e}")
         await query.message.answer("Произошла ошибка\nПовторите попытку позже")
 
 
-async def set_my_commands():
+async def main() -> None:
+    print("main STARTED")
+    main_bot = asyncio.create_task(dp.start_polling(bot))
+    await scheduled_send()
+    await main_bot
     commands = [
         types.BotCommand(command="/start", description="Начать"),
         types.BotCommand(command="/info", description="Информация"),
@@ -321,12 +365,6 @@ async def set_my_commands():
     await bot.set_my_commands(commands)
 
 
-async def main() -> None:
-    await dp.start_polling(bot)
-
-
 if __name__ == "__main__":
     Base.metadata.create_all(engine)
-    print("Bot started")
     asyncio.run(main())
-    asyncio.run(set_my_commands())

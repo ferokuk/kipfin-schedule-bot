@@ -4,6 +4,7 @@ from datetime import datetime
 import brom
 
 from dbconnection import DBConnection
+from models import TeacherSubscription, GroupSubscription
 
 
 def get_all_groups() -> list[dict]:
@@ -43,7 +44,7 @@ def get_schedule(group: str, date: datetime = None) -> str:
         if current_class_schedule:
             res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
     if not res:
-        return f"Пар для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет"
+        return f"Пар для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет."
     return header + res
 
 
@@ -56,7 +57,7 @@ def check_schedule_by_date(date: datetime) -> bool:
                 for d in selector.Выполнить().ВыгрузитьРезультат()])
 
 
-def get_teacher_schedule(teacher_full_name: str, date: datetime = None) -> str:
+def get_teacher_schedule(teacher_full_name: str, date: datetime = datetime.now()) -> str:
     con = DBConnection()
     selector: brom.Селектор = con.client.Документы.СоставлениеРасписания.СоздатьСелектор()
     schedules = [s for s in selector.Выполнить().ВыгрузитьРезультат() if date.day == s.Дата.day and
@@ -79,7 +80,7 @@ def get_teacher_schedule(teacher_full_name: str, date: datetime = None) -> str:
         if current_class_schedule:
             res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
     if not res:
-        return f"Пар для <b>{teacher_full_name}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет"
+        return f"Пар для <b>{teacher_full_name}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет."
     return header + res
 
 
@@ -109,6 +110,7 @@ def get_teacher_by_id(teacher_id: int) -> str:
     group_selector.ДобавитьОтбор("Код", teacher_id)
     return group_selector.ВыгрузитьРезультат()[-1].Наименование
 
+
 def get_teacher_id_by_name(teacher_name: int) -> int:
     con = DBConnection()
     group_selector: brom.Селектор = con.client.Справочники.Преподаватели.СоздатьСелектор()
@@ -116,5 +118,30 @@ def get_teacher_id_by_name(teacher_name: int) -> int:
     return group_selector.ВыгрузитьРезультат()[-1].Код
 
 
-def create_schedule_with_subscriptions(teachers: list[str], groups: list[str]) -> str:
-    pass
+def get_schedule_from_subscriptions(username: str,
+                                    teachers_subs: list[TeacherSubscription],
+                                    groups_subs: list[GroupSubscription],
+                                    today_date: datetime,
+                                    ) -> str:
+    res = f"<b>{username}</b>, Ваши подписки:\n"
+    if teachers_subs:
+        teachers_part = "<b>Преподаватели: \n</b>"
+        for sub in teachers_subs:
+            if check_schedule_by_date(today_date):
+                today_schedule = get_teacher_schedule(sub.teacher, today_date) + "\n"
+            else:
+                today_schedule = f"Пар для {sub.teacher} на {today_date.strftime('%d.%m.%Y')} нет. \n"
+            teachers_part += f"{today_schedule} {'-':->80}\n"
+        res += teachers_part
+    if groups_subs:
+        groups_part = "\n<b>Группы: \n</b>"
+        for sub in groups_subs:
+
+            if check_schedule_by_date(today_date):
+                today_schedule = get_schedule(sub.group, today_date) + "\n"
+            else:
+                today_schedule = f"Пар для {sub.group} на {today_date.strftime('%d.%m.%Y')} нет. \n"
+
+            groups_part += f"{today_schedule} {'-':->80}\n"
+        res += groups_part
+    return res

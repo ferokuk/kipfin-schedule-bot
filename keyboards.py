@@ -6,12 +6,13 @@ from config import ru_weekdays, ITEMS_PER_PAGE
 
 
 def create_inline_group_keyboard(current_page: int, all_groups: list[dict]) -> InlineKeyboardMarkup:
-    # all_groups = get_all_groups()
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[get_start_button()], [get_schedule_type_button()]])
     groups_chunks = [all_groups[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_groups), ITEMS_PER_PAGE)]
     row = []
     for group in groups_chunks[current_page]:
-        row.append(InlineKeyboardButton(text=group["name"], callback_data=group["id"]))
+        btn = InlineKeyboardButton(text=group["name"], callback_data=group["id"])
+
+        row.append(btn)
         if len(row) == 2:
             keyboard.inline_keyboard.append(row)
             row = []
@@ -37,7 +38,11 @@ def create_inline_teacher_keyboard(current_page: int, all_teachers: list[dict]) 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[get_start_button()], [get_schedule_type_button()]])
     groups_chunks = [all_teachers[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_teachers), ITEMS_PER_PAGE)]
     for teacher in groups_chunks[current_page]:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=teacher["name"], callback_data=teacher["id"])])
+        keyboard.inline_keyboard.append(
+            [
+                InlineKeyboardButton(text=teacher["name"], callback_data=teacher["id"])
+            ]
+        )
     prev_btn = InlineKeyboardButton(text="⬅️Назад", callback_data="prev_page_teachers")
     next_btn = InlineKeyboardButton(text="Вперёд➡️", callback_data="next_page_teachers")
     if 0 < current_page < len(groups_chunks) - 1:
@@ -102,11 +107,11 @@ def get_schedule_type_button() -> InlineKeyboardButton:
 
 
 def subscribe_to_schedule(entity: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text="Подписаться на расписание", callback_data=f"sub_{entity}")
+    return InlineKeyboardButton(text="✅Подписаться на расписание✅", callback_data=f"sub_{entity}")
 
 
 def unsubscribe_to_schedule(entity: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text="Отписаться от расписания", callback_data=f"unsub_{entity}")
+    return InlineKeyboardButton(text="❌Отписаться от расписания❌", callback_data=f"unsub_{entity}")
 
 
 def create_nav_keyboard(entity: str, schedule_type: str, is_subscribe: bool) -> InlineKeyboardMarkup:
@@ -131,3 +136,14 @@ def create_nav_keyboard(entity: str, schedule_type: str, is_subscribe: bool) -> 
                 unsubscribe_to_schedule(entity)
             ]
         ])
+
+
+def create_subscriptions_keyboard(today: datetime, tomorrow: datetime) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"{today.strftime('%d.%m.%Y')} ({ru_weekdays[today.weekday()]})",
+                                  callback_data="show_today_subs")],
+            [InlineKeyboardButton(text=f"{tomorrow.strftime('%d.%m.%Y')} ({ru_weekdays[tomorrow.weekday()]})",
+                                  callback_data="show_tomorrow_subs")],
+        ]
+    )

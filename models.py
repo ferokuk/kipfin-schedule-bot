@@ -2,12 +2,13 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import String, Column, Integer, BigInteger, DateTime, Boolean, ForeignKey, create_engine
+from sqlalchemy import String, Column, Integer, BigInteger, ForeignKey, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 load_dotenv()
 Base = declarative_base()
 logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
+
 
 class User(Base):
     __tablename__ = 'users'
@@ -21,6 +22,7 @@ class User(Base):
     # Связь с подписками на рассылки для преподавателей
     teacher_subscriptions = relationship('TeacherSubscription', back_populates='user')
 
+
 # Модель для подписок на рассылки для групп
 class GroupSubscription(Base):
     __tablename__ = 'group_subscriptions'
@@ -30,6 +32,7 @@ class GroupSubscription(Base):
     group = Column(String)
 
     user = relationship('User', back_populates='group_subscriptions')
+
 
 # Модель для подписок на рассылки для преподавателей
 class TeacherSubscription(Base):
@@ -51,4 +54,3 @@ dbname = os.getenv("POSTGRES_DBNAME")
 engine = create_engine(f'postgresql://{username}:{password}@{host}:{port}/{dbname}', echo=True)
 Session = sessionmaker(bind=engine)
 session = Session()
-
