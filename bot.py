@@ -213,7 +213,6 @@ async def back_to_start(query: types.CallbackQuery, state: FSMContext):
 async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
     schedule_type = query.data
     if schedule_type == "teacher":
-        await state.set_state(UserState.teacher)
         teachers = get_all_teachers()
         data = await state.update_data(all_teachers=teachers, schedule_type=schedule_type, teacher=schedule_type)
         total_pages = len(teachers) // ITEMS_PER_PAGE + 1
@@ -228,9 +227,8 @@ async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
         await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                             message_id=query.message.message_id,
                                             reply_markup=keyboard, )
-
+        await state.set_state(UserState.teacher)
     if schedule_type == "group":
-        await state.set_state(UserState.group)
         groups = get_all_groups()
         data = await state.update_data(all_groups=groups, schedule_type=schedule_type, group=schedule_type)
         chosen_date = data.get("date")
@@ -245,7 +243,7 @@ async def process_schedule_type(query: types.CallbackQuery, state: FSMContext):
         await bot.edit_message_reply_markup(chat_id=query.message.chat.id,
                                             message_id=query.message.message_id,
                                             reply_markup=keyboard, )
-
+        await state.set_state(UserState.group)
 
 @dp.callback_query(lambda query: query.data == "schedule_type")
 async def back_to_schedule_type(query: types.CallbackQuery, state: FSMContext):
@@ -297,10 +295,10 @@ async def process_group(query: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
         groups = data.get("all_groups", [])
         if not any([group in {d.get("name"), d.get("id")} for d in groups]):
-            await query.message.answer(f"Группы {group} не существует. \n"
-                                       f"Возможно вы забыли дефис между направлением и номером? \n"
-                                       f"Правильный формат: 1ОИБАС-1222, 3ИСИП-620",
-                                       reply_markup=create_inline_group_keyboard(current_page, groups))
+            # await query.message.answer(f"Группы {group} не существует. \n"
+            #                            f"Возможно вы забыли дефис между направлением и номером? \n"
+            #                            f"Правильный формат: 1ОИБАС-1222, 3ИСИП-620",
+            #                            reply_markup=create_inline_group_keyboard(current_page, groups))
             return
         data = await state.update_data(group=group)
         date = datetime.strptime(data["date"], "%d.%m.%Y")
@@ -329,8 +327,8 @@ async def process_teacher(query: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
         teachers = data.get("all_teachers", [])
         if not any(teacher in {d.get("id"), d.get("name")} for d in teachers):
-            await query.message.answer(f"Преподавателя {teacher} не существует. \n",
-                                       reply_markup=create_inline_teacher_keyboard(current_page, teachers))
+            # await query.message.answer(f"Преподавателя {teacher} не существует. \n",
+            #                            reply_markup=create_inline_teacher_keyboard(current_page, teachers))
             return
         data = await state.update_data(teacher=teacher)
         date = datetime.strptime(data["date"], "%d.%m.%Y")
