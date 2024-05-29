@@ -16,7 +16,6 @@ class DBConnection:
     def __init__(self):
         try:
             self.client = БромКлиент(os.getenv("CONNECTION_STRING"), os.getenv("USER"), os.getenv("PASSWORD"))
-
         except Exception as e:
             print(f"EXCEPTION WHILE CONNECTING:\n{e}")
 

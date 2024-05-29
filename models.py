@@ -1,14 +1,18 @@
+import enum
 import logging
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import String, Column, Integer, BigInteger, ForeignKey, create_engine
+from sqlalchemy import String, Column, Integer, BigInteger, ForeignKey, create_engine, Enum
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 load_dotenv()
 Base = declarative_base()
 logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
 
+class SubscriptionType(enum.Enum):
+    TEACHER = "teacher"
+    GROUP = "group"
 
 class User(Base):
     __tablename__ = 'users'
@@ -17,32 +21,23 @@ class User(Base):
     username = Column(String, unique=True)
 
     # Связь с подписками на рассылки для групп
-    group_subscriptions = relationship('GroupSubscription', back_populates='user')
+    subscriptions = relationship('Subscription', back_populates='user')
 
     # Связь с подписками на рассылки для преподавателей
-    teacher_subscriptions = relationship('TeacherSubscription', back_populates='user')
 
 
 # Модель для подписок на рассылки для групп
-class GroupSubscription(Base):
-    __tablename__ = 'group_subscriptions'
+class Subscription(Base):
+    __tablename__ = 'subscriptions'
 
     id = Column(Integer, primary_key=True)
     user_id = Column(BigInteger, ForeignKey('users.id'))
-    group = Column(String)
+    entity_id = Column(Integer, nullable=False)
+    entity_type = Column(Enum(SubscriptionType, name="entity_type"), nullable=False)
 
-    user = relationship('User', back_populates='group_subscriptions')
+    user = relationship('User', back_populates='subscriptions')
 
 
-# Модель для подписок на рассылки для преподавателей
-class TeacherSubscription(Base):
-    __tablename__ = 'teacher_subscriptions'
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey('users.id'))
-    teacher = Column(String)
-
-    user = relationship('User', back_populates='teacher_subscriptions')
 
 
 username = os.getenv("POSTGRES_USERNAME")
@@ -51,6 +46,7 @@ host = os.getenv("POSTGRES_HOST")
 port = os.getenv("POSTGRES_PORT")
 dbname = os.getenv("POSTGRES_DBNAME")
 
-engine = create_engine(f'postgresql://{username}:{password}@{host}:{port}/{dbname}', echo=True)
+engine = create_engine(f'postgresql://{username}:{password}@{host}:{port}/{dbname}')
+Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 session = Session()

@@ -1,10 +1,9 @@
-import os
 from datetime import datetime
 
 import brom
 
 from dbconnection import DBConnection
-from models import TeacherSubscription, GroupSubscription
+from models import Subscription, SubscriptionType
 
 
 def get_all_groups() -> list[dict]:
@@ -22,27 +21,20 @@ def get_all_teachers() -> list[dict]:
     return [{"name": g.Наименование, "id": str(int(g.Код))} for g in selector.Выбрать().ВыгрузитьРезультат()]
 
 
-def get_schedule(group: str, date: datetime = None) -> str:
-    con = DBConnection()
-    selector: brom.Селектор = con.client.Документы.СоставлениеРасписания.СоздатьСелектор()
-    schedules = [s for s in selector.Выполнить().ВыгрузитьРезультат() if date.day == s.Дата.day and
-                 date.month == s.Дата.month and
-                 date.year == s.Дата.year
-                 ]
-    if not schedules:
-        return f"Расписания на {date.strftime('%d.%m.%Y')} нет."
-    schedule = schedules[-1]
+def get_schedule(group: str, date: datetime = datetime.now()) -> str:
+    selector: brom.Селектор = DBConnection().client.Документы.СоставлениеРасписания.СоздатьСелектор()
+    selector.ДобавитьОтбор("Дата", date)
+    schedule = selector.ВыгрузитьРезультат()[0]
     header = f"Расписание для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')}"
     res = f""""""
-    for class_number in range(1, int(os.getenv("MAX_LESSONS")) + 1):
-        current_class_schedule = ""
-        for row in getattr(schedule, f"Пара{class_number}"):
-            if group in str(row.Группа.Наименование):
-                teacher = str(row.Преподаватель or "Нет").strip()
-                classroom = str(row.Аудитория.Наименование or "Нет").strip()
-                current_class_schedule += f"\n<i>{teacher}</i> - {classroom}"
-        if current_class_schedule:
-            res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
+    for class_number in range(1, 8):
+        current_class_schedule = "".join([f"\n<i>{row.Преподаватель}</i> - {row.Аудитория}"
+                                          for row in schedule[f"Пара{class_number}"]
+                                          if group in row.Группа.Наименование
+                                          ])
+        if not current_class_schedule:
+            continue
+        res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
     if not res:
         return f"Пар для <b>{group}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет."
     return header + res
@@ -51,34 +43,28 @@ def get_schedule(group: str, date: datetime = None) -> str:
 def check_schedule_by_date(date: datetime) -> bool:
     con = DBConnection()
     selector: brom.Селектор = con.client.Документы.СоставлениеРасписания.СоздатьСелектор()
-    return any([date.day == d.Дата.day and
-                date.month == d.Дата.month and
-                date.year == d.Дата.year
-                for d in selector.Выполнить().ВыгрузитьРезультат()])
+    try:
+        selector.ДобавитьОтбор("Дата", date)
+        schedule = selector.ВыгрузитьРезультат()[0]
+        return True
+    except AttributeError:
+        return False
 
 
 def get_teacher_schedule(teacher_full_name: str, date: datetime = datetime.now()) -> str:
-    con = DBConnection()
-    selector: brom.Селектор = con.client.Документы.СоставлениеРасписания.СоздатьСелектор()
-    schedules = [s for s in selector.Выполнить().ВыгрузитьРезультат() if date.day == s.Дата.day and
-                 date.month == s.Дата.month and
-                 date.year == s.Дата.year
-                 ]
-    if not schedules:
-        return f"Расписания на {date.strftime('%d.%m.%Y')} нет."
-    schedule = schedules[-1]
-    teacher_full_name = teacher_full_name.strip()
-    header = f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для преподавателя <b>{teacher_full_name}</b>"""
+    selector: brom.Селектор = DBConnection().client.Документы.СоставлениеРасписания.СоздатьСелектор()
+    selector.ДобавитьОтбор("Дата", date)
+    schedule = selector.ВыгрузитьРезультат()[0]
+    header = f"""Расписание на {schedule.Дата.strftime('%d.%m.%Y')} для <b>{teacher_full_name}</b>"""
     res = ""
-    for class_number in range(1, int(os.getenv("MAX_LESSONS")) + 1):
-        current_class_schedule = ""
-        for row in getattr(schedule, f"Пара{class_number}"):
-            if teacher_full_name == row.Преподаватель.Наименование:
-                group = str(row.Группа.Наименование).strip()
-                classroom = str(row.Аудитория.Наименование).strip()
-                current_class_schedule += f"\n<i>{group}</i> - {classroom}"
-        if current_class_schedule:
-            res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
+    for class_number in range(1, 8):
+        current_class_schedule = "\n".join([f"\n<i>{row.Группа}</i> - {row.Аудитория}"
+                                            for row in schedule[f"Пара{class_number}"]
+                                            if teacher_full_name in row.Преподаватель.Наименование
+                                            ])
+        if not current_class_schedule:
+            continue
+        res += f"\n{class_number}. <b>{get_class_time(class_number, date)}</b> " + current_class_schedule
     if not res:
         return f"Пар для <b>{teacher_full_name}</b> на {schedule.Дата.strftime('%d.%m.%Y')} нет."
     return header + res
@@ -118,30 +104,28 @@ def get_teacher_id_by_name(teacher_name: int) -> int:
     return group_selector.ВыгрузитьРезультат()[-1].Код
 
 
-def get_schedule_from_subscriptions(username: str,
-                                    teachers_subs: list[TeacherSubscription],
-                                    groups_subs: list[GroupSubscription],
-                                    today_date: datetime,
-                                    ) -> str:
+def get_schedule_from_subscriptions(username: str, subs: list[Subscription], date: datetime.date) -> str:
+    if not check_schedule_by_date(date):
+        return f"Расписания на {date.strftime('%d.%m.%Y')} нет. \n"
     res = f"<b>{username}</b>, Ваши подписки:\n"
-    if teachers_subs:
-        teachers_part = "<b>Преподаватели: \n</b>"
-        for sub in teachers_subs:
-            if check_schedule_by_date(today_date):
-                today_schedule = get_teacher_schedule(sub.teacher, today_date) + "\n"
-            else:
-                today_schedule = f"Пар для {sub.teacher} на {today_date.strftime('%d.%m.%Y')} нет. \n"
-            teachers_part += f"{today_schedule} {'-':->80}\n"
-        res += teachers_part
-    if groups_subs:
-        groups_part = "\n<b>Группы: \n</b>"
-        for sub in groups_subs:
+    if not subs:
+        return "<b>Вы ещё не подписаны ни на одно расписание</b>"
+    teacher_schedule = "<b>Преподаватели: \n</b>"
+    group_schedule = "<b>Группы: \n</b>"
+    try:
+        all_groups = get_all_groups()
+        all_teachers = get_all_teachers()
+        for sub in subs:
+            match sub.entity_type:
+                case SubscriptionType.GROUP:
+                    group = next((item for item in all_groups if item["id"] == str(sub.entity_id)), None)["name"]
+                    today_schedule = get_schedule(group, date) + "\n"
+                    group_schedule += f"{today_schedule} {'-':->60}\n"
 
-            if check_schedule_by_date(today_date):
-                today_schedule = get_schedule(sub.group, today_date) + "\n"
-            else:
-                today_schedule = f"Пар для {sub.group} на {today_date.strftime('%d.%m.%Y')} нет. \n"
-
-            groups_part += f"{today_schedule} {'-':->80}\n"
-        res += groups_part
-    return res
+                case SubscriptionType.TEACHER:
+                    teacher = next((item for item in all_teachers if item["id"] == str(sub.entity_id)), None)["name"]
+                    today_schedule = get_teacher_schedule(teacher, date) + "\n"
+                    teacher_schedule += f"{today_schedule} {'-':->60}\n"
+    except Exception as e:
+        return f"Произошла ошибка при получении расписания по подпискам: {e}"
+    return res + teacher_schedule + "\n" + group_schedule

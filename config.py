@@ -12,7 +12,7 @@ ru_weekdays = {
 
 ITEMS_PER_PAGE = 10
 
-HELP_TEXT = """СПРАВКА KIPFIN_SCHEDULE_BOT v0.1.0 Alpha Release:            
+HELP_TEXT = """СПРАВКА KIPFIN_SCHEDULE_BOT v1.0.0 Release:            
 
 1. Данный бот использует расписание, составленное и опубликованное учебной частью в информационной базе аудиторного фонда.            
 

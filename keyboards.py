@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import ru_weekdays, ITEMS_PER_PAGE
+from models import Subscription, SubscriptionType
 
 
 def create_inline_group_keyboard(current_page: int, all_groups: list[dict]) -> InlineKeyboardMarkup:
@@ -106,15 +107,33 @@ def get_schedule_type_button() -> InlineKeyboardButton:
     return InlineKeyboardButton(text="Вернуться к выбору вида расписания", callback_data="schedule_type")
 
 
-def subscribe_to_schedule(entity: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text="✅Подписаться на расписание✅", callback_data=f"sub_{entity}")
+def subscribe_to_schedule(entity_id: int, entity_type: str, entity_name: str | None = None) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=f"✅ Подписаться на {entity_name if entity_name else 'расписание '}✅",
+                                callback_data=f"sub_{entity_type}_{entity_id}")
 
 
-def unsubscribe_to_schedule(entity: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text="❌Отписаться от расписания❌", callback_data=f"unsub_{entity}")
+def unsubscribe_to_schedule(entity_id: int, entity_type: str, entity_name: str | None = None) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=f"❌ Отписаться от {entity_name if entity_name else 'расписания '}❌",
+                                callback_data=f"unsub_{entity_type}_{entity_id}")
 
 
-def create_nav_keyboard(entity: str, schedule_type: str, is_subscribe: bool) -> InlineKeyboardMarkup:
+def create_subs_handler_keyboard(subs: list[Subscription], all_teachers: list[dict],
+                                 all_groups: list[dict]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [unsubscribe_to_schedule(
+                sub.entity_id,
+                sub.entity_type,
+                next((item for item in all_teachers if item["id"] == str(sub.entity_id)))["name"]
+                if sub.entity_type == SubscriptionType.TEACHER
+                else
+                next((item for item in all_groups if item["id"] == str(sub.entity_id)))["name"]
+            )]
+            for sub in subs
+        ])
+
+
+def create_nav_keyboard(entity_id: int, schedule_type: str, is_subscribed: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -129,11 +148,11 @@ def create_nav_keyboard(entity: str, schedule_type: str, is_subscribe: bool) -> 
                     callback_data="open_teachers_nav" if schedule_type == 'teacher' else "open_groups_nav")
             ],
             [
-                subscribe_to_schedule(entity)
+                unsubscribe_to_schedule(entity_id, schedule_type)
             ]
-            if is_subscribe else
+            if is_subscribed else
             [
-                unsubscribe_to_schedule(entity)
+                subscribe_to_schedule(entity_id, schedule_type)
             ]
         ])
 
