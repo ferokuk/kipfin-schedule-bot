@@ -10,15 +10,17 @@ load_dotenv()
 Base = declarative_base()
 logging.getLogger('sqlalchemy').setLevel(logging.ERROR)
 
+
 class SubscriptionType(enum.Enum):
     TEACHER = "teacher"
     GROUP = "group"
+
 
 class User(Base):
     __tablename__ = 'users'
 
     id = Column(BigInteger, primary_key=True)
-    username = Column(String, unique=True)
+    username = Column(String)
 
     # Связь с подписками на рассылки для групп
     subscriptions = relationship('Subscription', back_populates='user')
@@ -36,8 +38,6 @@ class Subscription(Base):
     entity_type = Column(Enum(SubscriptionType, name="entity_type"), nullable=False)
 
     user = relationship('User', back_populates='subscriptions')
-
-
 
 
 username = os.getenv("POSTGRES_USERNAME")

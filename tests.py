@@ -58,4 +58,8 @@ def test2(client, date, group):
 
 
 if __name__ == "__main__":
-    clear_subscriptions()
+    client = DBConnection().client
+    selector = client.Справочники.Группы.СоздатьСелектор()
+    selector.ДобавитьОтбор("Курс.Наименование", "1")
+    res = selector.ВыгрузитьРезультат()
+    print(res)
