@@ -7,10 +7,7 @@ ru_weekdays = {
     5: "суббота",
     6: "воскресенье"
 }
-ADMINS = {
-    414490446,
 
-}
 ITEMS_PER_PAGE = 8
 
 HELP_TEXT = """СПРАВКА KIPFIN_SCHEDULE_BOT v1.0.0 Release:            

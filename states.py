@@ -6,6 +6,7 @@ class UserState(StatesGroup):
     group = State()
     teacher = State()
     schedule_type = State()
+    schedule = State()
     my_subs = State()
     all_groups = State()
     all_teachers = State()
