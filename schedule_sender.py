@@ -5,27 +5,30 @@ from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from dotenv import load_dotenv
+from icecream import ic
 
 from dbconnection import DBConnection
 from models import session, Subscription, SubscriptionType, User
-from utils import get_schedule_from_subscriptions
+from utils import get_schedule_from_subscriptions, check_schedule_by_date
 
 load_dotenv()
 bot = Bot(os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
 
 
-async def send_schedule_to_subscribers():
+def send_schedule_to_subscribers():
     users = session.query(User).all()
     tomorrow = datetime.now().date() + timedelta(days=1)
-    # Отправка расписания каждому подписчику
-
-    for user in users:
-        user_subs = user.subscriptions
-        await bot.send_message(user.id,
-                               get_schedule_from_subscriptions(user.username, user_subs, tomorrow),
-                               parse_mode=ParseMode.HTML
-                               )
+    schedule = check_schedule_by_date(tomorrow)
+    ic(tomorrow, schedule)
+    if not schedule:
+        return
+    # for user in users:
+    #     user_subs = user.subscriptions
+    #     await bot.send_message(user.id,
+    #                            get_schedule_from_subscriptions(user.username, user_subs, tomorrow, schedule),
+    #                            parse_mode=ParseMode.HTML
+    #                            )
 
 
 def clear_subscriptions():

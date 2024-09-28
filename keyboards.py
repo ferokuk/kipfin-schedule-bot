@@ -6,12 +6,12 @@ from config import ru_weekdays, ITEMS_PER_PAGE
 from models import Subscription, SubscriptionType
 
 
-def create_inline_group_keyboard(current_page: int, all_groups: list[dict]) -> InlineKeyboardMarkup:
+def create_inline_group_keyboard(current_page: int, all_groups: list) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     groups_chunks = [all_groups[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_groups), ITEMS_PER_PAGE)]
     row = []
     for group in groups_chunks[current_page]:
-        btn = InlineKeyboardButton(text=group["name"], callback_data=group["id"])
+        btn = InlineKeyboardButton(text=str(group.Наименование), callback_data=str(int(group.Код)))
         row.append(btn)
         if len(row) == 2:
             keyboard.inline_keyboard.append(row)
@@ -34,13 +34,13 @@ def create_inline_group_keyboard(current_page: int, all_groups: list[dict]) -> I
     return keyboard
 
 
-def create_inline_teacher_keyboard(current_page: int, all_teachers: list[dict]) -> InlineKeyboardMarkup:
+def create_inline_teacher_keyboard(current_page: int, all_teachers: list) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     groups_chunks = [all_teachers[i:i + ITEMS_PER_PAGE] for i in range(0, len(all_teachers), ITEMS_PER_PAGE)]
     for teacher in groups_chunks[current_page]:
         keyboard.inline_keyboard.append(
             [
-                InlineKeyboardButton(text=teacher["name"], callback_data=teacher["id"])
+                InlineKeyboardButton(text=str(teacher.Наименование), callback_data=str(int(teacher.Код)))
             ]
         )
     prev_btn = InlineKeyboardButton(text="⬅️Предыдущая", callback_data="prev_page_teachers")
@@ -116,17 +116,18 @@ def unsubscribe_to_schedule(entity_id: int, entity_type: str, entity_name: str |
                                 callback_data=f"unsub_{entity_type}_{entity_id}")
 
 
-def create_subs_handler_keyboard(subs: list[Subscription], all_teachers: list[dict],
-                                 all_groups: list[dict]) -> InlineKeyboardMarkup:
+def create_subs_handler_keyboard(subs: list[Subscription], all_teachers: list,
+                                 all_groups: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [unsubscribe_to_schedule(
+            [
+                unsubscribe_to_schedule(
                 sub.entity_id,
                 SubscriptionType(sub.entity_type).value,
-                next((item for item in all_teachers if item["id"] == str(sub.entity_id)))["name"]
+                next((item for item in all_teachers if int(item.Код) == sub.entity_id)).Наименование
                 if sub.entity_type == SubscriptionType.TEACHER
                 else
-                next((item for item in all_groups if item["id"] == str(sub.entity_id)))["name"]
+                next((item for item in all_groups if int(item.Код) == sub.entity_id)).Наименование
             )]
             for sub in subs
         ])

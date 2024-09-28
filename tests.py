@@ -1,10 +1,10 @@
-import datetime
+from datetime import datetime, timedelta
 
 import brom
 
 from dbconnection import DBConnection
-from schedule_sender import clear_subscriptions
-from utils import get_teacher_schedule, get_schedule, get_class_time
+from schedule_sender import clear_subscriptions, send_schedule_to_subscribers
+from utils import get_teacher_schedule, get_schedule, get_class_time, get_all_groups, get_all_teachers
 import time
 from functools import wraps
 
@@ -58,8 +58,4 @@ def test2(client, date, group):
 
 
 if __name__ == "__main__":
-    client = DBConnection().client
-    selector = client.Справочники.Группы.СоздатьСелектор()
-    selector.ДобавитьОтбор("Курс.Наименование", "1")
-    res = selector.ВыгрузитьРезультат()
-    print(res)
+    send_schedule_to_subscribers()
